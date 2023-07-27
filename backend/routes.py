@@ -64,51 +64,33 @@ def count():
     count = collection.count_documents({})  # Count all documents in the collection
     return jsonify({"count": count}), 200  # Respond with the count and HTTP OK (200) status code
 
-
-@app.route("/song", methods=["GET", "POST"])
+@app.route("/song", methods=["GET"])
 def songs():
-    """Return all songs from the database or create a new song"""
-    if request.method == "GET":
-        # Handle GET request to fetch all songs
-        try:
-            # Fetch all documents from the 'songs' collection
-            all_songs = list(collection.find({}))
+    # docker run -d --name mongodb-test -e MONGO_INITDB_ROOT_USERNAME=user
+    # -e MONGO_INITDB_ROOT_PASSWORD=password -e MONGO_INITDB_DATABASE=collection mongo
+    results = list(db.songs.find({}))
+    print(results[0])
+    return {"songs": parse_json(results)}, 200
 
-            # Prepare the response in the required format
-            response_data = {"songs": all_songs}
+@app.route("/song", methods=["POST"])
+def create_song():
+    # get data from the json body
+    song_in = request.json
 
-            # Return the data as a JSON response with HTTP OK (200) status code
-            return jsonify(response_data), 200
+    print(song_in["id"])
 
-        except Exception as e:
-            # If there's an error, log it and return an error response
-            app.logger.error(f"Error occurred while fetching songs: {str(e)}")
-            return jsonify({"error": "Internal Server Error"}), 500
+    # if the id is already there, return 303 with the URL for the resource
+    song = db.songs.find_one({"id": song_in["id"]})
+    if song:
+        return {
+            "Message": f"song with id {song_in['id']} already present"
+        }, 302
 
-    elif request.method == "POST":
-        # Handle POST request to create a new song
-        try:
-            # Extract song data from the request body
-            song_data = request.get_json()
+    insert_id: InsertOneResult = db.songs.insert_one(song_in)
 
-            # Check if a song with the given ID already exists in the 'songs' collection
-            existing_song = collection.find_one({"id": song_data["id"]})
+    return {"inserted id": parse_json(insert_id.inserted_id)}, 201
 
-            # If a song with the given ID already exists, return 302 FOUND with a message
-            if existing_song:
-                return jsonify({"Message": f"Song with id {song_data['id']} already present"}), 302
-
-            # Append the new song data to the 'songs' collection
-            insert_result = collection.insert_one(song_data)
-
-            # Return the ID of the inserted song as JSON with HTTP CREATED (201) status code
-            return jsonify({"inserted id": str(insert_result.inserted_id)}), 201
-
-        except Exception as e:
-            # If there's an error, log it and return an error response
-            app.logger.error(f"Error occurred while creating song: {str(e)}")
-            return jsonify({"error": "Internal Server Error"}), 500
-
+    
 @app.route("/song/<int:id>", methods=["PUT"])
 def update_song(id):
     """Update an existing song in the database"""
